@@ -1,10 +1,14 @@
 package es.alepico.epuber;
 
 import javafx.beans.value.ChangeListener;
+import javafx.collections.FXCollections;
+import javafx.collections.ObservableList;
+import javafx.collections.transformation.FilteredList;
 import javafx.concurrent.Worker;
 import javafx.geometry.Insets;
 import javafx.geometry.Orientation;
 import javafx.geometry.Pos;
+import javafx.scene.Node;
 import javafx.scene.Scene;
 import javafx.scene.control.*;
 import javafx.scene.layout.*;
@@ -44,8 +48,14 @@ public class ReaderWindow {
 
     private Path tempRoot;
     private Path opfDir;
-    private List<String> spineHrefs = new ArrayList<>();
+    private final List<String> spineHrefs = new ArrayList<>();
     private int currentIndex = 0;
+
+    private final ListView<ChapterEntry> chapterList = new ListView<>();
+    private final TextField chapterSearch = new TextField();
+    private final Label progressLabel = new Label();
+    private ObservableList<ChapterEntry> chapterEntries = FXCollections.observableArrayList();
+    private FilteredList<ChapterEntry> filteredEntries;
 
     private ReaderWindow() {}
 
@@ -67,30 +77,44 @@ public class ReaderWindow {
         alignJustBtn.setSelected(true);
 
         HBox toolbar = new HBox(10,
-                new Label("Fuente:"), fontCombo,
-                new Label("Tamaño:"), fontSizeSlider,
-                new Label("Interlineado:"), lineHeightSlider,
-                new Label("Márgenes:"), marginSlider,
-                new Label("Alineación:"), new HBox(6, alignLeftBtn, alignJustBtn),
+                labeledBox("Fuente", fontCombo),
+                labeledBox("Tamaño", fontSizeSlider),
+                labeledBox("Interlineado", lineHeightSlider),
+                labeledBox("Márgenes", marginSlider),
+                labeledBox("Alineación", new HBox(6, alignLeftBtn, alignJustBtn)),
                 darkTheme
         );
         toolbar.setAlignment(Pos.CENTER_LEFT);
-        toolbar.setPadding(new Insets(8));
-        toolbar.setStyle("-fx-background-color: -fx-base;");
+        toolbar.setPadding(new Insets(14));
+        toolbar.getStyleClass().add("control-bar");
 
         // Navegación
         prevBtn.setOnAction(e -> goTo(currentIndex - 1));
         nextBtn.setOnAction(e -> goTo(currentIndex + 1));
-        HBox nav = new HBox(10, prevBtn, nextBtn);
-        nav.setAlignment(Pos.CENTER);
-        nav.setPadding(new Insets(8));
+        HBox nav = new HBox(10, prevBtn, nextBtn, progressLabel);
+        nav.setAlignment(Pos.CENTER_LEFT);
+        nav.setPadding(new Insets(12, 14, 12, 14));
+        nav.getStyleClass().add("control-bar");
 
         // Panel de capítulos (spine simple)
-        ListView<String> chapterList = new ListView<>();
         chapterList.setPrefWidth(260);
-        chapterList.getSelectionModel().selectedIndexProperty().addListener((obs, oldv, idx) -> {
-            if (idx != null && idx.intValue() >= 0 && idx.intValue() < spineHrefs.size()) {
-                goTo(idx.intValue());
+        chapterList.getStyleClass().add("panel");
+        chapterList.setCellFactory(list -> new ListCell<>() {
+            @Override protected void updateItem(ChapterEntry item, boolean empty) {
+                super.updateItem(item, empty);
+                setText(empty || item == null ? null : item.name());
+            }
+        });
+        chapterList.getSelectionModel().selectedItemProperty().addListener((obs, oldv, entry) -> {
+            if (entry != null) goTo(entry.spineIndex());
+        });
+
+        chapterSearch.setPromptText("Buscar capítulo…");
+        chapterSearch.textProperty().addListener((obs, ov, nv) -> {
+            if (filteredEntries != null) {
+                String query = nv == null ? "" : nv.trim().toLowerCase(Locale.ROOT);
+                filteredEntries.setPredicate(entry -> query.isEmpty() || entry.name().toLowerCase(Locale.ROOT).contains(query));
+                chapterList.getSelectionModel().clearSelection();
             }
         });
 
@@ -98,20 +122,35 @@ public class ReaderWindow {
         unzipToTemp(epubFile);
         parseOpf();
 
-        chapterList.getItems().setAll(prettyNames(spineHrefs));
+        buildToc(prettyNames(spineHrefs));
 
         // Contenido
         BorderPane content = new BorderPane();
         content.setTop(toolbar);
         content.setCenter(webView);
         content.setBottom(nav);
+        content.getStyleClass().add("panel");
+
+        VBox tocPane = new VBox(10,
+                new Label("Contenido"),
+                chapterSearch,
+                chapterList
+        );
+        tocPane.setPadding(new Insets(12));
+        tocPane.getStyleClass().add("panel");
 
         SplitPane split = new SplitPane();
         split.setOrientation(Orientation.HORIZONTAL);
-        split.getItems().addAll(chapterList, content);
+        split.getItems().addAll(tocPane, content);
         split.setDividerPositions(0.22);
 
         Scene scene = new Scene(split, 1100, 800);
+        scene.getStylesheets().add(readerCss());
+        scene.setOnKeyPressed(evt -> switch (evt.getCode()) {
+            case RIGHT, PAGE_DOWN -> goTo(currentIndex + 1);
+            case LEFT, PAGE_UP -> goTo(currentIndex - 1);
+            default -> { }
+        });
         stage.setScene(scene);
 
         // Reaplicar CSS tras cada carga
@@ -147,11 +186,24 @@ public class ReaderWindow {
             } catch (IOException ignored) {}
         }
         updateNavButtons();
+        progressLabel.setText("Capítulo " + (currentIndex+1) + " de " + spineHrefs.size());
+        selectCurrentInList();
     }
 
     private void updateNavButtons() {
         prevBtn.setDisable(currentIndex<=0);
         nextBtn.setDisable(currentIndex>=spineHrefs.size()-1);
+    }
+
+    private void selectCurrentInList() {
+        if (filteredEntries == null) return;
+        for (ChapterEntry entry : filteredEntries) {
+            if (entry.spineIndex() == currentIndex) {
+                chapterList.getSelectionModel().select(entry);
+                chapterList.scrollTo(entry);
+                break;
+            }
+        }
     }
 
     private void injectUserCss() {
@@ -269,6 +321,15 @@ public class ReaderWindow {
         if (spineHrefs.isEmpty()) throw new IOException("Spine vacío o no soportado.");
     }
 
+    private void buildToc(List<String> names) {
+        chapterEntries = FXCollections.observableArrayList();
+        for (int i = 0; i < names.size(); i++) {
+            chapterEntries.add(new ChapterEntry(names.get(i), i));
+        }
+        filteredEntries = new FilteredList<>(chapterEntries, c -> true);
+        chapterList.setItems(filteredEntries);
+    }
+
     private static boolean isHtmlLike(String href) {
         String l = href.toLowerCase(Locale.ROOT);
         return l.endsWith(".xhtml") || l.endsWith(".html") || l.endsWith(".htm");
@@ -294,4 +355,29 @@ public class ReaderWindow {
         }
         return out;
     }
+
+    private HBox labeledBox(String label, Node content) {
+        Label l = new Label(label);
+        VBox box = new VBox(4, l, content);
+        box.getStyleClass().add("field-group");
+        return new HBox(box);
+    }
+
+    private String readerCss() {
+        return """
+            data:text/css,
+            :root { -fx-font-family: "Inter", "Segoe UI", system-ui; }
+            .split-pane { -fx-background-color: linear-gradient(to bottom,#f7f8fb,#eef1f6); }
+            .panel { -fx-background-color: white; -fx-background-radius: 18; -fx-padding: 12; -fx-effect: dropshadow(gaussian, rgba(16,24,40,0.08), 14, 0.12, 0, 4); }
+            .control-bar { -fx-background-color: transparent; }
+            .button { -fx-background-radius: 12; -fx-padding: 9 14; -fx-font-weight: 600; }
+            .toggle-button { -fx-background-radius: 10; -fx-padding: 8 10; }
+            .text-field, .combo-box, .slider { -fx-background-radius: 12; }
+            .list-view { -fx-background-radius: 12; -fx-padding: 6; }
+            .field-group > .label { -fx-text-fill: #3b4452; -fx-opacity: 0.9; -fx-font-size: 11px; -fx-font-weight: 600; }
+            .label { -fx-text-fill: #1f2937; }
+        """;
+    }
+
+    private record ChapterEntry(String name, int spineIndex) { }
 }
