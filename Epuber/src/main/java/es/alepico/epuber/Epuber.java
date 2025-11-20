@@ -236,16 +236,21 @@ public class Epuber extends Application {
         return """
             data:text/css,
             :root { -fx-font-family: "Inter", "Segoe UI", system-ui; }
-            .app-title { -fx-font-size: 22px; -fx-font-weight: 700; }
-            .app-subtitle { -fx-opacity: 0.85; }
-            .text-field { -fx-background-radius: 12; -fx-padding: 8 12; }
-            .button { -fx-background-radius: 12; -fx-padding: 8 14; }
+            .root { -fx-background-color: linear-gradient(to bottom, #f7f8fb, #eef1f6); }
+            .app-title { -fx-font-size: 22px; -fx-font-weight: 700; -fx-text-fill:#0f172a; }
+            .app-subtitle { -fx-opacity: 0.85; -fx-text-fill:#334155; }
+            .text-field { -fx-background-radius: 12; -fx-padding: 8 12; -fx-background-color:white; }
+            .text-field:focused { -fx-effect: dropshadow(gaussian, rgba(76,139,245,0.4),12,0,0,4); }
+            .scroll-pane { -fx-background-color: transparent; }
+            .button { -fx-background-radius: 12; -fx-padding: 8 14; -fx-font-weight:600; -fx-background-color: linear-gradient(to right,#4C8BF5,#5fa4ff); -fx-text-fill:white; }
+            .button:disabled { -fx-opacity:0.7; }
+            .titled-pane > .title { -fx-background-radius: 12; }
             .text-area { -fx-background-radius: 12; }
             .footer { -fx-opacity: .6; -fx-font-size: 11px; }
             .progress-bar { -fx-accent: #4C8BF5; -fx-background-radius: 10; }
             .btn-danger { -fx-background-color: #d84545; -fx-text-fill: white; }
-            .thumb { -fx-effect: dropshadow(gaussian, rgba(0,0,0,0.25),8,0,0,2); -fx-background-radius: 10; }
-            """;
+            .thumb { -fx-effect: dropshadow(gaussian, rgba(0,0,0,0.18),10,0,0,2); -fx-background-radius: 12; -fx-padding:6; -fx-background-color:white; }
+        """;
     }
 
     // ================= Acciones principales =================
