@@ -2,16 +2,20 @@
 
 Programa que gestiona EPUBS, MOBIS y PDF's
 
-- Funcionalidades -
-    Permite hacer un listado de libros encontrados en directorio
-    Consulta de portadas
-    Consulta del documento
-    Copia de los ficheros indicados
-    Filtros de búsqueda y actuación
-    Conversor parcial de Pdf a Epub
+## Funcionalidades
+- Exploración de biblioteca con filtros por extensión, fecha, tamaño mínimo y palabra clave.
+- Copiador plano con control de sobrescritura y modo "añadir solo nuevos".
+- Listado de libros sin necesidad de definir destino, con exportación de títulos y autores.
+- Pestañas dedicadas para:
+  - **Biblioteca**: acciones de copiado/listado y registro plegable estilo consola.
+  - **Conversor PDF → EPUB**: conversión de maquetación fija, metadatos y portada opcional.
+  - **Carátulas**: galería paginada con selección inmediata y editor de metadatos con búsqueda online.
+  - **Duplicados**: detección de posibles ejemplares repetidos y eliminación directa.
+- Lectura integrada de EPUB con ajustes de fuente, alineación, márgenes y modo oscuro.
+- Visualización de carátulas de EPUB/PDF y acceso con doble clic al lector o aplicación del sistema.
+- Generación de ficheros de metadatos auxiliares con información editada por el usuario.
 
-- Errores -
-    El conversor no funciona correctamente con Pdf's que sean solo de imagen.
-    Revisar traspaso de contenido en texto en el conversor.
-    Revisar tabulaciones, formatos y espaciados en el conversor.
-    Comprobar si se permiten añadir o modificar los metadatos
+## Notas
+- El conversor utiliza PDFBox para rasterizar páginas y empaquetar el EPUB resultante.
+- La búsqueda de metadatos se apoya en Open Library; requiere conexión a Internet.
+- El registro puede copiarse al portapapeles desde su cabecera desplegable.
