@@ -103,6 +103,10 @@ public class CoversTab extends Tab {
             renderPage();
         };
         if (Platform.isFxApplicationThread()) update.run(); else Platform.runLater(update);
+        files = new ArrayList<>(Optional.ofNullable(newFiles).orElse(List.of()));
+        currentPage = 1;
+        setDisable(files.isEmpty());
+        renderPage();
     }
 
     private void renderPage() {
