@@ -20,6 +20,7 @@ import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
+import java.util.function.Consumer;
 
 public class LibraryTab extends Tab {
     private final Stage stage;
@@ -34,6 +35,7 @@ public class LibraryTab extends Tab {
     private final Label statusLabel;
     private final LibraryService service = new LibraryService();
     private Task<?> currentTask;
+    private Consumer<List<Path>> scanFinishedListener;
 
     public LibraryTab(Stage stage) {
         super("Biblioteca");
@@ -112,6 +114,10 @@ public class LibraryTab extends Tab {
         setupAutoScan();
     }
 
+    public void setOnScanFinished(Consumer<List<Path>> listener) {
+        this.scanFinishedListener = listener;
+    }
+
     private void chooseDir(Stage s, TextField f) {
         DirectoryChooser dc = new DirectoryChooser();
         File d = dc.showDialog(s);
@@ -171,7 +177,7 @@ public class LibraryTab extends Tab {
     }
 
     private ConversionConfig buildScanConfig() {
-        if(sourceField.getText().isBlank()) { log("¡Falta origen!"); return null; }
+        if(sourceField.getText().isBlank()) { log("¡Falta origen!"); warnMissingSource(); return null; }
 
         ConversionConfig cfg = new ConversionConfig();
         cfg.source = Path.of(sourceField.getText());
@@ -187,7 +193,7 @@ public class LibraryTab extends Tab {
     }
 
     private ConversionConfig buildCopyConfig() {
-        if(sourceField.getText().isBlank()) { log("¡Falta origen!"); return null; }
+        if(sourceField.getText().isBlank()) { log("¡Falta origen!"); warnMissingSource(); return null; }
         if(targetField.getText().isBlank()) { log("¡Falta destino!"); return null; }
         ConversionConfig cfg = buildScanConfig();
         if(cfg == null) return null;
@@ -238,6 +244,10 @@ public class LibraryTab extends Tab {
         scannedFiles.clear();
         scannedFiles.addAll(files);
 
+        if (scanFinishedListener != null) {
+            scanFinishedListener.accept(List.copyOf(scannedFiles));
+        }
+
         boolean hasResults = !scannedFiles.isEmpty();
         startBtn.setDisable(!hasResults);
         saveListBtn.setDisable(!hasResults);
@@ -273,6 +283,15 @@ public class LibraryTab extends Tab {
         logContainer.setVisible(show);
         logContainer.setManaged(show);
         toggleLogBtn.setText(show ? "Ocultar registro" : "Mostrar registro");
+    }
+
+    private void warnMissingSource() {
+        Runnable r = () -> {
+            Alert a = new Alert(Alert.AlertType.ERROR, "Debes seleccionar una carpeta de origen antes de escanear.", ButtonType.OK);
+            a.setHeaderText(null);
+            a.showAndWait();
+        };
+        if (Platform.isFxApplicationThread()) r.run(); else Platform.runLater(r);
     }
 
     private void log(String t) { logArea.appendText(t + "\n"); }

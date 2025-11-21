@@ -28,13 +28,17 @@ public class MainWindow {
     private void initLayout() {
         // Crear el contenedor de pestañas
         TabPane tabPane = new TabPane();
-        
+
         // Instanciar y añadir cada módulo funcional
         // Pasamos el 'stage' a aquellos que necesiten abrir diálogos (Library y Converter)
+        CoversTab coversTab = new CoversTab();
+        LibraryTab libraryTab = new LibraryTab(stage);
+        libraryTab.setOnScanFinished(coversTab::updateFiles);
+
         tabPane.getTabs().addAll(
-            new LibraryTab(stage),
+            libraryTab,
             new ConverterTab(stage),
-            new CoversTab(),        // CoversTab gestiona su propia lógica de visualización
+            coversTab,        // Activada tras escanear Biblioteca
             new DuplicatesTab(stage)
         );
 
