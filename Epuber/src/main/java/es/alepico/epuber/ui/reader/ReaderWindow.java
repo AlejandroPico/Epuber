@@ -1,5 +1,4 @@
-package es.alepico.epuber;
-/*
+package es.alepico.epuber.ui.reader;
 
 import javafx.beans.value.ChangeListener;
 import javafx.collections.FXCollections;
@@ -12,6 +11,8 @@ import javafx.geometry.Pos;
 import javafx.scene.Node;
 import javafx.scene.Scene;
 import javafx.scene.control.*;
+import javafx.scene.input.KeyCode; // <--- IMPORTANTE: Añadido
+import javafx.scene.input.KeyEvent; // <--- IMPORTANTE: Añadido
 import javafx.scene.layout.*;
 import javafx.scene.web.WebEngine;
 import javafx.scene.web.WebView;
@@ -147,11 +148,18 @@ public class ReaderWindow {
 
         Scene scene = new Scene(split, 1100, 800);
         scene.getStylesheets().add(readerCss());
-        scene.setOnKeyPressed(evt -> switch (evt.getCode()) {
-            case RIGHT, PAGE_DOWN -> goTo(currentIndex + 1);
-            case LEFT, PAGE_UP -> goTo(currentIndex - 1);
-            default -> { }
+        
+        // --- CORRECCIÓN AQUÍ ---
+        // Se han añadido llaves { } y KeyCode.
+        scene.setOnKeyPressed(evt -> {
+            switch (evt.getCode()) {
+                case RIGHT, PAGE_DOWN -> goTo(currentIndex + 1);
+                case LEFT, PAGE_UP -> goTo(currentIndex - 1);
+                default -> { }
+            }
         });
+        // -----------------------
+        
         stage.setScene(scene);
 
         // Reaplicar CSS tras cada carga
@@ -382,4 +390,3 @@ public class ReaderWindow {
 
     private record ChapterEntry(String name, int spineIndex) { }
 }
-*/

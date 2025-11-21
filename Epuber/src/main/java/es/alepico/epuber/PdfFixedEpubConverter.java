@@ -19,6 +19,8 @@ import java.util.zip.ZipOutputStream;
  * - Opción de partir dobles (ancho/alto > 1.3).
  * - Inserta portada, sinopsis y metadatos tipo Calibre.
  */
+
+/*
 public class PdfFixedEpubConverter {
 
     public interface ProgressListener {
@@ -302,3 +304,5 @@ public class PdfFixedEpubConverter {
         }
     }
 }
+
+*/
