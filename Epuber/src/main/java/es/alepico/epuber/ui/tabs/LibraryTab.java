@@ -2,10 +2,8 @@ package es.alepico.epuber.ui.tabs;
 
 import es.alepico.epuber.model.ConversionConfig;
 import es.alepico.epuber.service.LibraryService;
+import javafx.animation.PauseTransition;
 import javafx.application.Platform;
-import javafx.beans.property.SimpleStringProperty;
-import javafx.collections.FXCollections;
-import javafx.collections.ObservableList;
 import javafx.concurrent.Task;
 import javafx.geometry.Insets;
 import javafx.scene.control.*;
@@ -13,15 +11,15 @@ import javafx.scene.layout.*;
 import javafx.stage.DirectoryChooser;
 import javafx.stage.FileChooser;
 import javafx.stage.Stage;
+import javafx.util.Duration;
 
 import java.io.File;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.time.format.DateTimeFormatter;
+import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
-import java.util.Optional;
 
 public class LibraryTab extends Tab {
     private final Stage stage;
@@ -30,12 +28,12 @@ public class LibraryTab extends Tab {
     private final DatePicker fromDate, toDate;
     private final TextArea logArea;
     private final ProgressBar progressBar;
-    private final Button startBtn, saveListBtn;
-    private final TableView<Path> fileTable;
-    private final ObservableList<Path> scannedFiles = FXCollections.observableArrayList();
+    private final Button startBtn, saveListBtn, scanBtn, toggleLogBtn;
+    private final VBox logContainer;
+    private final List<Path> scannedFiles = new ArrayList<>();
     private final Label statusLabel;
     private final LibraryService service = new LibraryService();
-    private Task<LibraryService.ScanResult> currentTask;
+    private Task<?> currentTask;
 
     public LibraryTab(Stage stage) {
         super("Biblioteca");
@@ -45,7 +43,7 @@ public class LibraryTab extends Tab {
         // Controles
         sourceField = new TextField(); sourceField.setPromptText("Origen...");
         targetField = new TextField(); targetField.setPromptText("Destino...");
-        Button btnSrc = new Button("..."); btnSrc.setOnAction(e-> chooseDir(stage, sourceField));
+        Button btnSrc = new Button("..."); btnSrc.setOnAction(e-> chooseDirAndScan(stage, sourceField));
         Button btnDst = new Button("..."); btnDst.setOnAction(e-> chooseDir(stage, targetField));
 
         extEpub = new CheckBox(".epub"); extEpub.setSelected(true);
@@ -57,8 +55,12 @@ public class LibraryTab extends Tab {
         overwriteCheck = new CheckBox("Sobrescribir");
         onlyNewCheck = new CheckBox("Solo nuevos");
 
+        scanBtn = new Button("Escanear");
+        scanBtn.setOnAction(e -> startScan());
+
         startBtn = new Button("Iniciar Copia");
-        startBtn.setOnAction(e -> toggleProcess());
+        startBtn.setDisable(true);
+        startBtn.setOnAction(e -> toggleCopyProcess());
         saveListBtn = new Button("Guardar listado");
         saveListBtn.setDisable(true);
         saveListBtn.setOnAction(e -> saveListToFile());
@@ -67,12 +69,19 @@ public class LibraryTab extends Tab {
 
         logArea = new TextArea();
         logArea.setEditable(false);
-        logArea.setPrefRowCount(8);
+        logArea.setPrefRowCount(10);
         logArea.setWrapText(true);
+        logArea.setStyle("-fx-control-inner-background: black; -fx-text-fill: #39ff14; -fx-font-family: 'Consolas', 'Ubuntu Mono', monospace;");
         progressBar = new ProgressBar(0);
         progressBar.setMaxWidth(Double.MAX_VALUE);
 
-        fileTable = createTable();
+        toggleLogBtn = new Button("Mostrar registro");
+        toggleLogBtn.setOnAction(e -> toggleLogVisibility());
+        logContainer = new VBox(new Label("Registro"), logArea);
+        logContainer.setVisible(false);
+        logContainer.setManaged(false);
+        VBox.setVgrow(logArea, Priority.ALWAYS);
+        VBox.setVgrow(logContainer, Priority.ALWAYS);
 
         // Layout
         GridPane grid = new GridPane();
@@ -83,46 +92,24 @@ public class LibraryTab extends Tab {
         grid.add(new HBox(10, new Label("Filtros:"), keywordField, fromDate, toDate), 1, 3);
         grid.add(new HBox(10, overwriteCheck, onlyNewCheck), 1, 4);
 
-        HBox actions = new HBox(10, startBtn, saveListBtn, statusLabel);
+        HBox actions = new HBox(10, scanBtn, startBtn, saveListBtn, statusLabel);
 
         VBox content = new VBox(15,
             new Label("Gestión Masiva de Biblioteca"),
             grid,
             actions,
             progressBar,
-            fileTable,
-            new Label("Registro"),
-            logArea
+            toggleLogBtn,
+            logContainer
         );
         content.setPadding(new Insets(20));
         content.getStyleClass().add("panel");
-        VBox.setVgrow(fileTable, Priority.ALWAYS);
-        VBox.setVgrow(logArea, Priority.ALWAYS);
 
         BorderPane root = new BorderPane(content);
         root.setPrefSize(Double.MAX_VALUE, Double.MAX_VALUE);
         setContent(root);
-    }
 
-    private TableView<Path> createTable() {
-        TableView<Path> table = new TableView<>();
-        table.setItems(scannedFiles);
-        table.setColumnResizePolicy(TableView.CONSTRAINED_RESIZE_POLICY_ALL_COLUMNS);
-        table.setPlaceholder(new Label("Sin resultados aún"));
-
-        TableColumn<Path, String> nameCol = new TableColumn<>("Archivo");
-        nameCol.setCellValueFactory(cd -> new SimpleStringProperty(cd.getValue().getFileName().toString()));
-
-        TableColumn<Path, String> folderCol = new TableColumn<>("Carpeta");
-        folderCol.setCellValueFactory(cd -> new SimpleStringProperty(
-            Optional.ofNullable(cd.getValue().getParent()).map(Path::toString).orElse("")
-        ));
-
-        TableColumn<Path, String> dateCol = new TableColumn<>("Modificado");
-        dateCol.setCellValueFactory(cd -> new SimpleStringProperty(formatDate(cd.getValue())));
-
-        table.getColumns().addAll(nameCol, folderCol, dateCol);
-        return table;
+        setupAutoScan();
     }
 
     private void chooseDir(Stage s, TextField f) {
@@ -131,54 +118,137 @@ public class LibraryTab extends Tab {
         if(d != null) f.setText(d.getAbsolutePath());
     }
 
-    private void toggleProcess() {
+    private void chooseDirAndScan(Stage s, TextField f) {
+        chooseDir(s, f);
+        if(!f.getText().isBlank()) startScan();
+    }
+
+    private void setupAutoScan() {
+        PauseTransition debounce = new PauseTransition(Duration.millis(500));
+        sourceField.textProperty().addListener((obs, oldV, newV) -> {
+            if(newV == null || newV.isBlank()) return;
+            debounce.setOnFinished(e -> startScan());
+            debounce.playFromStart();
+        });
+    }
+
+    private void startScan() {
         if(currentTask != null && currentTask.isRunning()) {
-            log("Cancelando tarea actual...");
-            currentTask.cancel();
+            log("Ya hay un proceso en marcha.");
             return;
         }
 
-        logArea.clear();
-        ConversionConfig cfg = buildConfig();
+        ConversionConfig cfg = buildScanConfig();
         if(cfg == null) return;
 
-        LibraryTask task = new LibraryTask(cfg);
-        currentTask = task;
-
-        startBtn.setText("Cancelar");
-        startBtn.getStyleClass().add("button-danger");
+        scanBtn.setDisable(true);
+        startBtn.setDisable(true);
         saveListBtn.setDisable(true);
-        progressBar.progressProperty().bind(task.progressProperty());
-        statusLabel.textProperty().bind(task.messageProperty());
+        logArea.clear();
 
-        task.setOnSucceeded(e -> finish(task.getValue(), task.getFiles(), "Proceso terminado."));
-        task.setOnCancelled(e -> finish(task.getValue(), task.getFiles(), "Cancelado."));
-        task.setOnFailed(e -> finish(task.getValue(), task.getFiles(), "Error: " + task.getException().getMessage()));
+        Task<List<Path>> scanTask = new Task<>() {
+            @Override protected List<Path> call() {
+                updateMessage("Escaneando...");
+                updateProgress(-1, 1);
+                List<Path> files = service.scanFiles(cfg);
+                updateMessage("Encontrados: " + files.size());
+                return files;
+            }
+        };
 
-        new Thread(task).start();
+        currentTask = scanTask;
+        statusLabel.textProperty().bind(scanTask.messageProperty());
+        progressBar.progressProperty().bind(scanTask.progressProperty());
+
+        scanTask.setOnSucceeded(e -> finishScan(scanTask.getValue(), "Escaneo completado."));
+        scanTask.setOnCancelled(e -> finishScan(List.of(), "Escaneo cancelado."));
+        scanTask.setOnFailed(e -> {
+            log("Error al escanear: " + scanTask.getException().getMessage());
+            finishScan(List.of(), "Error al escanear.");
+        });
+
+        new Thread(scanTask).start();
     }
 
-    private ConversionConfig buildConfig() {
+    private ConversionConfig buildScanConfig() {
         if(sourceField.getText().isBlank()) { log("¡Falta origen!"); return null; }
-        if(targetField.getText().isBlank()) { log("¡Falta destino!"); return null; }
 
         ConversionConfig cfg = new ConversionConfig();
         cfg.source = Path.of(sourceField.getText());
-        cfg.target = Path.of(targetField.getText());
         cfg.extensions = new HashSet<>();
         if(extEpub.isSelected()) cfg.extensions.add(".epub");
         if(extPdf.isSelected()) cfg.extensions.add(".pdf");
         if(extMobi.isSelected()) cfg.extensions.add(".mobi");
         if(cfg.extensions.isEmpty()) { log("Selecciona al menos una extensión de archivo."); return null; }
-        cfg.overwrite = overwriteCheck.isSelected();
-        cfg.onlyNew = onlyNewCheck.isSelected();
         cfg.keyword = keywordField.getText();
         cfg.fromDate = fromDate.getValue();
         cfg.toDate = toDate.getValue();
         return cfg;
     }
 
-    private void finish(LibraryService.ScanResult res, List<Path> files, String msg) {
+    private ConversionConfig buildCopyConfig() {
+        if(sourceField.getText().isBlank()) { log("¡Falta origen!"); return null; }
+        if(targetField.getText().isBlank()) { log("¡Falta destino!"); return null; }
+        ConversionConfig cfg = buildScanConfig();
+        if(cfg == null) return null;
+        cfg.target = Path.of(targetField.getText());
+        cfg.overwrite = overwriteCheck.isSelected();
+        cfg.onlyNew = onlyNewCheck.isSelected();
+        return cfg;
+    }
+
+    private void toggleCopyProcess() {
+        if(currentTask != null && currentTask.isRunning()) {
+            log("Cancelando tarea actual...");
+            currentTask.cancel();
+            return;
+        }
+
+        if(scannedFiles.isEmpty()) {
+            log("Escanea primero para habilitar la copia.");
+            return;
+        }
+
+        ConversionConfig cfg = buildCopyConfig();
+        if(cfg == null) return;
+
+        LibraryCopyTask task = new LibraryCopyTask(cfg, List.copyOf(scannedFiles));
+        currentTask = task;
+
+        startBtn.setText("Cancelar");
+        startBtn.getStyleClass().add("button-danger");
+        saveListBtn.setDisable(true);
+        scanBtn.setDisable(true);
+        progressBar.progressProperty().bind(task.progressProperty());
+        statusLabel.textProperty().bind(task.messageProperty());
+
+        task.setOnSucceeded(e -> finishCopy(task.getValue(), "Proceso terminado."));
+        task.setOnCancelled(e -> finishCopy(task.getValue(), "Cancelado."));
+        task.setOnFailed(e -> finishCopy(task.getValue(), "Error: " + task.getException().getMessage()));
+
+        new Thread(task).start();
+    }
+
+    private void finishScan(List<Path> files, String msg) {
+        statusLabel.textProperty().unbind();
+        progressBar.progressProperty().unbind();
+        progressBar.setProgress(0);
+        currentTask = null;
+
+        scannedFiles.clear();
+        scannedFiles.addAll(files);
+
+        boolean hasResults = !scannedFiles.isEmpty();
+        startBtn.setDisable(!hasResults);
+        saveListBtn.setDisable(!hasResults);
+        scanBtn.setDisable(false);
+
+        log(msg);
+        log("Documentos encontrados: " + files.size());
+        statusLabel.setText(msg);
+    }
+
+    private void finishCopy(LibraryService.ScanResult res, String msg) {
         statusLabel.textProperty().unbind();
         progressBar.progressProperty().unbind();
         progressBar.setProgress(0);
@@ -187,8 +257,8 @@ public class LibraryTab extends Tab {
         currentTask = null;
 
         if(res == null) res = new LibraryService.ScanResult();
-        scannedFiles.setAll(files);
         saveListBtn.setDisable(scannedFiles.isEmpty());
+        scanBtn.setDisable(false);
 
         log(msg);
         log(String.format("Encontrados: %d | Copiados: %d | Omitidos: %d", res.found, res.copied, res.skipped));
@@ -196,6 +266,13 @@ public class LibraryTab extends Tab {
         if(res.cancelled) log("Proceso cancelado por el usuario.");
 
         statusLabel.setText(msg);
+    }
+
+    private void toggleLogVisibility() {
+        boolean show = !logContainer.isVisible();
+        logContainer.setVisible(show);
+        logContainer.setManaged(show);
+        toggleLogBtn.setText(show ? "Ocultar registro" : "Mostrar registro");
     }
 
     private void log(String t) { logArea.appendText(t + "\n"); }
@@ -207,56 +284,50 @@ public class LibraryTab extends Tab {
         }
 
         FileChooser chooser = new FileChooser();
-        chooser.setTitle("Guardar listado de archivos");
+        chooser.setTitle("Guardar listado de libros");
         chooser.getExtensionFilters().add(new FileChooser.ExtensionFilter("Texto", "*.txt"));
         chooser.setInitialFileName("listado.txt");
         File dest = chooser.showSaveDialog(stage);
         if(dest == null) return;
 
         try {
-            Files.write(dest.toPath(), scannedFiles.stream().map(Path::toString).toList());
+            List<String> lines = scannedFiles.stream()
+                    .map(Path::getFileName)
+                    .map(Path::toString)
+                    .map(this::formatTitleAndAuthor)
+                    .toList();
+            Files.write(dest.toPath(), lines);
             log("Listado guardado en: " + dest.getAbsolutePath());
         } catch (IOException e) {
             log("No se pudo guardar el listado: " + e.getMessage());
         }
     }
 
-    private String formatDate(Path path) {
-        try {
-            var time = Files.getLastModifiedTime(path).toInstant();
-            return DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm").withZone(java.time.ZoneId.systemDefault()).format(time);
-        } catch (IOException e) {
-            return "-";
-        }
+    private String formatTitleAndAuthor(String fileName) {
+        String baseName = fileName.replaceFirst("\\.[^.]+$", "");
+        String[] parts = baseName.split("\\s+-\\s+", 2);
+        String title = parts[0].trim();
+        String author = parts.length > 1 ? parts[1].trim() : "Autor desconocido";
+        return title + " - " + author;
     }
 
-    private class LibraryTask extends Task<LibraryService.ScanResult> {
+    private class LibraryCopyTask extends Task<LibraryService.ScanResult> {
         private final ConversionConfig cfg;
-        private List<Path> files = List.of();
+        private final List<Path> files;
 
-        private LibraryTask(ConversionConfig cfg) { this.cfg = cfg; }
+        private LibraryCopyTask(ConversionConfig cfg, List<Path> files) {
+            this.cfg = cfg;
+            this.files = files;
+        }
 
         @Override protected LibraryService.ScanResult call() {
-            updateMessage("Escaneando...");
-            files = service.scanFiles(cfg);
-            updateMessage("Encontrados: " + files.size());
-            logFromTask("Escaneo completado. Archivos encontrados: " + files.size());
-
-            if(isCancelled()) {
-                LibraryService.ScanResult cancelled = new LibraryService.ScanResult();
-                cancelled.found = files.size();
-                cancelled.cancelled = true;
-                return cancelled;
-            }
-
+            updateMessage("Copiando...");
             updateProgress(0, Math.max(files.size(), 1));
             return service.copyFiles(files, cfg, new LibraryService.LibraryListener() {
                 @Override public void onProgress(int c, int t, String m) { updateProgress(c, t); updateMessage(m); }
                 @Override public void onLog(String m) { logFromTask(m); }
             });
         }
-
-        public List<Path> getFiles() { return files; }
 
         private void logFromTask(String msg) { Platform.runLater(() -> log(msg)); }
     }
