@@ -177,7 +177,7 @@ public class LibraryTab extends Tab {
     }
 
     private ConversionConfig buildScanConfig() {
-        if(sourceField.getText().isBlank()) { log("¡Falta origen!"); return null; }
+        if(sourceField.getText().isBlank()) { log("¡Falta origen!"); warnMissingSource(); return null; }
 
         ConversionConfig cfg = new ConversionConfig();
         cfg.source = Path.of(sourceField.getText());
@@ -193,7 +193,7 @@ public class LibraryTab extends Tab {
     }
 
     private ConversionConfig buildCopyConfig() {
-        if(sourceField.getText().isBlank()) { log("¡Falta origen!"); return null; }
+        if(sourceField.getText().isBlank()) { log("¡Falta origen!"); warnMissingSource(); return null; }
         if(targetField.getText().isBlank()) { log("¡Falta destino!"); return null; }
         ConversionConfig cfg = buildScanConfig();
         if(cfg == null) return null;
@@ -283,6 +283,15 @@ public class LibraryTab extends Tab {
         logContainer.setVisible(show);
         logContainer.setManaged(show);
         toggleLogBtn.setText(show ? "Ocultar registro" : "Mostrar registro");
+    }
+
+    private void warnMissingSource() {
+        Runnable r = () -> {
+            Alert a = new Alert(Alert.AlertType.ERROR, "Debes seleccionar una carpeta de origen antes de escanear.", ButtonType.OK);
+            a.setHeaderText(null);
+            a.showAndWait();
+        };
+        if (Platform.isFxApplicationThread()) r.run(); else Platform.runLater(r);
     }
 
     private void log(String t) { logArea.appendText(t + "\n"); }

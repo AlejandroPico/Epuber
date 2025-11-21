@@ -96,6 +96,13 @@ public class CoversTab extends Tab {
     }
 
     public void updateFiles(List<Path> newFiles) {
+        Runnable update = () -> {
+            files = new ArrayList<>(Optional.ofNullable(newFiles).orElse(List.of()));
+            currentPage = 1;
+            setDisable(files.isEmpty());
+            renderPage();
+        };
+        if (Platform.isFxApplicationThread()) update.run(); else Platform.runLater(update);
         files = new ArrayList<>(Optional.ofNullable(newFiles).orElse(List.of()));
         currentPage = 1;
         setDisable(files.isEmpty());
