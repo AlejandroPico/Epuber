@@ -20,6 +20,7 @@ import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
+import java.util.function.Consumer;
 
 public class LibraryTab extends Tab {
     private final Stage stage;
@@ -34,6 +35,7 @@ public class LibraryTab extends Tab {
     private final Label statusLabel;
     private final LibraryService service = new LibraryService();
     private Task<?> currentTask;
+    private Consumer<List<Path>> scanFinishedListener;
 
     public LibraryTab(Stage stage) {
         super("Biblioteca");
@@ -110,6 +112,10 @@ public class LibraryTab extends Tab {
         setContent(root);
 
         setupAutoScan();
+    }
+
+    public void setOnScanFinished(Consumer<List<Path>> listener) {
+        this.scanFinishedListener = listener;
     }
 
     private void chooseDir(Stage s, TextField f) {
@@ -237,6 +243,10 @@ public class LibraryTab extends Tab {
 
         scannedFiles.clear();
         scannedFiles.addAll(files);
+
+        if (scanFinishedListener != null) {
+            scanFinishedListener.accept(List.copyOf(scannedFiles));
+        }
 
         boolean hasResults = !scannedFiles.isEmpty();
         startBtn.setDisable(!hasResults);
