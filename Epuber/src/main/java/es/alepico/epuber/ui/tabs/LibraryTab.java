@@ -236,26 +236,30 @@ public class LibraryTab extends Tab {
     }
 
     private void finishScan(List<Path> files, String msg) {
-        statusLabel.textProperty().unbind();
-        progressBar.progressProperty().unbind();
-        progressBar.setProgress(0);
-        currentTask = null;
+        Runnable uiUpdate = () -> {
+            statusLabel.textProperty().unbind();
+            progressBar.progressProperty().unbind();
+            progressBar.setProgress(0);
+            currentTask = null;
 
-        scannedFiles.clear();
-        scannedFiles.addAll(files);
+            scannedFiles.clear();
+            scannedFiles.addAll(files);
 
-        if (scanFinishedListener != null) {
-            scanFinishedListener.accept(List.copyOf(scannedFiles));
-        }
+            if (scanFinishedListener != null) {
+                scanFinishedListener.accept(List.copyOf(scannedFiles));
+            }
 
-        boolean hasResults = !scannedFiles.isEmpty();
-        startBtn.setDisable(!hasResults);
-        saveListBtn.setDisable(!hasResults);
-        scanBtn.setDisable(false);
+            boolean hasResults = !scannedFiles.isEmpty();
+            startBtn.setDisable(!hasResults);
+            saveListBtn.setDisable(!hasResults);
+            scanBtn.setDisable(false);
 
-        log(msg);
-        log("Documentos encontrados: " + files.size());
-        statusLabel.setText(msg);
+            log(msg);
+            log("Documentos encontrados: " + files.size());
+            statusLabel.setText(msg);
+        };
+
+        if (Platform.isFxApplicationThread()) uiUpdate.run(); else Platform.runLater(uiUpdate);
     }
 
     private void finishCopy(LibraryService.ScanResult res, String msg) {

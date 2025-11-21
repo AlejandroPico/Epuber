@@ -43,6 +43,7 @@ public class CoversTab extends Tab {
     private final ComboBox<Integer> pageSizeCombo = new ComboBox<>();
 
     private List<Path> files = List.of();
+    private boolean hasScanned = false;
     private int pageSize = 30;
     private int currentPage = 1;
     private javafx.concurrent.Task<?> currentTask;
@@ -97,6 +98,7 @@ public class CoversTab extends Tab {
     public void updateFiles(List<Path> newFiles) {
         Runnable update = () -> {
             files = new ArrayList<>(Optional.ofNullable(newFiles).orElse(List.of()));
+            hasScanned = true;
             currentPage = 1;
             renderPage();
         };
@@ -113,7 +115,10 @@ public class CoversTab extends Tab {
             pageInfo.setText("Página 0/0");
             prevBtn.setDisable(true);
             nextBtn.setDisable(true);
-            coversPane.getChildren().add(new Label("Selecciona una carpeta en Biblioteca y escanea para ver carátulas."));
+            String msg = hasScanned
+                    ? "No se encontraron libros en el último escaneo."
+                    : "Selecciona una carpeta en Biblioteca y escanea para ver carátulas.";
+            coversPane.getChildren().add(new Label(msg));
             return;
         }
 
